@@ -187,7 +187,7 @@ it; on the installer, tick "Add Python to PATH").
 
 ```powershell
 # 1. Get the code
-git clone https://github.com/<you>/AuraDFIR.git
+git clone [https://github.com/<you>/AuraDFIR.git](https://github.com/vaibhav-711/AuraDFIR)
 cd AuraDFIR
 
 # 2. Create an isolated Python environment for this project ("virtual environment")
