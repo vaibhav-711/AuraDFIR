@@ -2,9 +2,6 @@
 
 **An open-source web server log analysis and incident-response platform, built on the Elastic Stack.**
 
-> ⚠️ Rename note: check GitHub/PyPI for name collisions before publishing. The name appears in `app/config.py` (`APP_NAME`) and templates only.
-
----
 
 ## What is Aura DFIR?
 
