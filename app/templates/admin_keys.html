@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>AbuseIPDB API Keys</h1>
+
+<div class="panel">
+  <h3>Add key</h3>
+  <form method="post" action="/admin/keys">
+    <p style="display:flex;gap:10px">
+      <input name="label" placeholder="Label (e.g. personal-free-tier)" required>
+      <input name="api_key" placeholder="AbuseIPDB API key" required>
+      <input name="daily_limit" type="number" value="1000" min="1" title="Daily check quota" style="max-width:120px">
+      <button>Add</button>
+    </p>
+  </form>
+</div>
+
+<div class="panel">
+  <h3>Keys &amp; quota usage</h3>
+  <table>
+    <tr><th>Label</th><th>Key</th><th>Today</th><th>Quota</th><th>30-day total</th><th>Status</th><th></th></tr>
+    {% for k in stats %}
+    <tr>
+      <td>{{ k.label }}</td>
+      <td class="mono">{{ k.key_masked }}</td>
+      <td>{{ k.used_today }} / {{ k.daily_limit }}</td>
+      <td>
+        {% set pct = (100 * k.used_today / k.daily_limit) | round | int %}
+        <div class="bar"><div class="{{ 'bad' if pct >= 90 else ('warn' if pct >= 60 else '') }}"
+             style="width:{{ [pct, 100] | min }}%"></div></div>
+      </td>
+      <td>{{ k.total_period }}</td>
+      <td>
+        {% if k.exhausted_today %}<span class="badge high">rate-limited</span>
+        {% elif k.active %}<span class="badge open">active</span>
+        {% else %}<span class="badge closed">disabled</span>{% endif %}
+      </td>
+      <td style="white-space:nowrap">
+        <form class="inline" method="post" action="/admin/keys/{{ k.id }}/toggle">
+          <button class="ghost">{{ 'Disable' if k.active else 'Enable' }}</button>
+        </form>
+        <form class="inline" method="post" action="/admin/keys/{{ k.id }}/delete"
+              onsubmit="return confirm('Delete this key and its usage history?')">
+          <button class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No keys yet — add one above. Free-tier keys allow 1,000 checks/day.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h3>Bulk IP reputation check</h3>
+  <p class="muted">Paste IPs (one per line) and/or give a case ID to pull every unique source IP from its logs.
+     Cached results (&lt;24 h old) don't spend quota.</p>
+  <p><textarea id="bc-ips" rows="4" placeholder="203.0.113.7&#10;198.51.100.23"></textarea></p>
+  <p style="display:flex;gap:10px;align-items:center">
+    <label>Case ID: <input id="bc-case" type="number" style="width:100px"></label>
+    <button onclick="runBulkCheck()">Check IPs</button>
+    <span id="bc-status" class="muted"></span>
+  </p>
+  <div id="bc-results"></div>
+</div>
+
+<script>
+async function runBulkCheck() {
+  const ips = document.getElementById('bc-ips').value.split(/\s+/).filter(Boolean);
+  const caseId = document.getElementById('bc-case').value;
+  const status = document.getElementById('bc-status');
+  const body = { ips };
+  if (caseId) body.case_id = parseInt(caseId, 10);
+  status.textContent = 'Checking…';
+  try {
+    const r = await fetch('/intel/bulk-check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { status.textContent = 'Error: ' + (await r.json()).detail; return; }
+    const d = await r.json();
+    status.textContent = `${d.checked} checked (${d.api_calls} API calls, ${d.cache_hits} from cache)` +
+      (d.quota_exhausted ? ` — QUOTA EXHAUSTED, ${d.unchecked.length} IPs left unchecked` : '');
+    let html = '<table><tr><th>IP</th><th>Score</th><th>Reports</th><th>Country</th><th>ISP</th><th>Type</th><th>Tor</th><th>Cache</th></tr>';
+    for (const x of d.results) {
+      const cls = x.abuse_score >= 80 ? 'bad' : (x.abuse_score >= 25 ? 'warn' : 'ok');
+      html += `<tr><td class="mono">${x.ip}</td><td class="score ${cls}">${x.abuse_score}</td>` +
+              `<td>${x.total_reports}</td><td>${x.country}</td><td>${x.isp}</td>` +
+              `<td>${x.usage_type}</td><td>${x.is_tor ? '🧅' : ''}</td>` +
+              `<td class="muted">${x.cached ? 'cache' : 'live'}</td></tr>`;
+    }
+    html += '</table>';
+    if (d.skipped.length)
+      html += `<p class="muted">Skipped: ${d.skipped.map(s => s.ip + ' (' + s.reason + ')').join(', ')}</p>`;
+    document.getElementById('bc-results').innerHTML = html;
+  } catch (e) { status.textContent = 'Request failed: ' + e; }
+}
+</script>
+{% endblock %}

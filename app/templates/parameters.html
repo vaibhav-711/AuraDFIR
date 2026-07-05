@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>🔧 Parameter analysis{% if case %} — Case #{{ case.id }} {{ case.name }}{% endif %}</h1>
+<p class="muted">Declare the web server / proxy / load-balancer type, then paste log lines,
+   upload a file{% if case %}, or sample this case's indexed events{% endif %}. Aura DFIR reports
+   which expected parameters are present or missing and flags discrepancies
+   (missing timezone, inconsistent timestamps, private client IPs, etc.).</p>
+
+<div class="panel">
+  <form method="post" action="/tools/parameters" enctype="multipart/form-data">
+    {% if case %}<input type="hidden" name="case_id" value="{{ case.id }}">{% endif %}
+    <p style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label>Server type
+        <select name="server_type" style="width:auto">
+          {% for key, label in server_types %}
+          <option value="{{ key }}" {{ 'selected' if key == selected_type }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <span class="muted">Apache / Nginx / IIS are web servers; ALB / HAProxy / Squid are
+        load balancers &amp; proxies (same core fields).</span>
+    </p>
+
+    <p><textarea name="log_text" rows="7" placeholder="Paste raw access-log lines here…"
+                 class="mono">{{ log_text }}</textarea></p>
+
+    <p style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <button name="source" value="paste">Analyze pasted text</button>
+      <label class="muted">or upload a log file:
+        <input type="file" name="file" style="width:auto;display:inline">
+      </label>
+      <button name="source" value="upload" class="ghost">Analyze uploaded file</button>
+      {% if case %}
+      <button name="source" value="case" class="ghost">Sample from case #{{ case.id }}</button>
+      {% endif %}
+    </p>
+  </form>
+  {% if note %}<p class="muted">{{ note }}</p>{% endif %}
+</div>
+
+{% if report %}
+<div class="grid">
+  <div class="stat"><div class="n">{{ report.core_present }}/{{ report.core_total }}</div><div class="l">Core params present</div></div>
+  <div class="stat"><div class="n">{{ report.recommended_present }}/{{ report.recommended_total }}</div><div class="l">Recommended present</div></div>
+  <div class="stat"><div class="n">{{ report.missing_count }}</div><div class="l">Params missing</div></div>
+  <div class="stat"><div class="n">{{ (report.parse_rate * 100) | round | int }}%</div><div class="l">Lines parsed ({{ report.parsed }}/{{ report.sampled }})</div></div>
+  <div class="stat"><div class="n">{{ report.discrepancies | length }}</div><div class="l">Discrepancies</div></div>
+</div>
+
+{% if report.discrepancies %}
+<div class="panel">
+  <h3>⚠ Discrepancies</h3>
+  <table>
+    <tr><th>Severity</th><th>Check</th><th>Detail</th><th>Examples</th></tr>
+    {% for d in report.discrepancies %}
+    <tr>
+      <td><span class="badge {{ 'critical' if d.severity == 'high' else (d.severity if d.severity in ['medium','low'] else 'low') }}">{{ d.severity }}</span></td>
+      <td class="mono">{{ d.check }}</td>
+      <td>{{ d.message }}</td>
+      <td class="mono" style="max-width:220px;overflow-wrap:anywhere">{{ d.examples | join(', ') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="panel"><p class="muted">No discrepancies detected in the sample. ✓</p></div>
+{% endif %}
+
+<div class="panel">
+  <h3>Comparative parameter table — {{ report.server_label }}</h3>
+  {% if report.core_missing %}
+  <p class="error">Missing core parameters: {{ report.core_missing | join(', ') }}</p>
+  {% endif %}
+  <table>
+    <tr><th>Parameter</th><th>Category</th><th>Present</th><th>Populated</th><th>Sample value</th><th>ECS field / note</th></tr>
+    {% for p in report.parameters %}
+    <tr>
+      <td><strong>{{ p.label }}</strong><br><span class="muted" style="font-size:12px">{{ p.description }}</span></td>
+      <td><span class="badge {{ 'high' if p.category == 'core' else ('medium' if p.category == 'recommended' else 'low') }}">{{ p.category }}</span></td>
+      <td>{% if p.present %}<span class="badge open">present</span>{% else %}<span class="badge closed">missing</span>{% endif %}</td>
+      <td>{% if p.present %}{{ (p.populated_ratio * 100) | round | int }}%{% else %}—{% endif %}</td>
+      <td class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ p.sample }}">{{ p.sample or '—' }}</td>
+      <td class="mono">{{ p.ecs }}{% if p.note %}<br><span class="muted">{{ p.note }}</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

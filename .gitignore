@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+auradfir.db
+*.db
+*.log
+!samples/*.log          # keep the bundled sample log despite *.log above
+timeline*.json
+timeline*.csv
+admin_totp_qr.png
+
+# build outputs
+build/obf/
+build/pyi/
+build/build_log.txt
+dist/
+*.spec.bak
+
+# local Elasticsearch (downloaded by scripts/setup_elasticsearch.ps1)
+.elasticsearch/

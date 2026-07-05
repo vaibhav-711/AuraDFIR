@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ APP_NAME }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user is defined and user %}
+<nav>
+  <span class="brand">🔎 {{ APP_NAME }}</span>
+  <a href="/">Dashboard</a>
+  <a href="/cases">Cases</a>
+  <a href="/tools/parameters">Parameters</a>
+  {% if user.is_admin %}
+    <a href="/admin/keys">API Keys</a>
+    <a href="/admin/users">Users</a>
+  {% endif %}
+  <span class="spacer"></span>
+  <span class="muted">{{ user.username }}</span>
+  <form class="inline" method="post" action="/auth/logout"><button class="ghost">Logout</button></form>
+</nav>
+{% endif %}
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% macro rankcard(title, items, mono=False, fmt_bytes=False) %}
+<div class="panel">
+  <h3>{{ title }}</h3>
+  {% if items %}
+  <table class="rank">
+    {% for it in items %}
+    <tr>
+      <td class="rank-label {{ 'mono' if mono }}" title="{{ it.label }}">{{ it.label }}</td>
+      <td class="rank-bar">
+        <div class="rankbar"><div style="width:{{ it.pct }}%"></div></div>
+      </td>
+      <td class="rank-count">
+        {% if fmt_bytes %}{{ (it.count / 1048576) | round(2) }} MB{% else %}{{ it.count }}{% endif %}
+        <span class="muted">({{ it.share }}%)</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">No data.</p>{% endif %}
+</div>
+{% endmacro %}
+{% block content %}
+<h1>📊 Statistics — Case #{{ case.id }} {{ case.name }}</h1>
+
+{% if not stats %}
+  <div class="panel"><p class="muted">No logs indexed for this case yet.
+    Run <span class="mono">python scripts/ingest_logs.py --case {{ case.id }} --file access.log</span>.</p></div>
+{% else %}
+
+<div class="panel">
+  <form method="get" style="display:flex;gap:10px;align-items:center">
+    <label>Show top
+      <select name="top_n" onchange="this.form.submit()" style="width:auto">
+        {% for n in top_options %}
+        <option value="{{ n }}" {{ 'selected' if n == top_n }}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <span class="muted">entries per ranking</span>
+    <span class="spacer" style="flex:1"></span>
+    <a class="btn" href="/cases/{{ case.id }}/statistics.xlsx?top_n={{ top_n }}">⬇ Export Excel (.xlsx)</a>
+    <a class="btn" href="/cases/{{ case.id }}/statistics.json?top_n={{ top_n }}" target="_blank">Export JSON</a>
+    <a href="/cases/{{ case.id }}">← back to case</a>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="n">{{ stats.summary.total_events }}</div><div class="l">Total events</div></div>
+  <div class="stat"><div class="n">{{ stats.summary.unique_ips }}</div><div class="l">Unique IPs</div></div>
+  <div class="stat"><div class="n">{{ stats.summary.unique_user_agents }}</div><div class="l">Unique user-agents</div></div>
+  <div class="stat"><div class="n">{{ stats.summary.unique_urls }}</div><div class="l">Unique URLs</div></div>
+  <div class="stat"><div class="n">{{ stats.summary.unique_domains }}</div><div class="l">Domains</div></div>
+  <div class="stat"><div class="n">{{ (stats.summary.total_bytes / 1073741824) | round(2) }} GB</div><div class="l">Data served</div></div>
+</div>
+
+<div class="panel">
+  <h3>Traffic over time</h3>
+  {{ stats.timechart.svg | safe }}
+  {% if stats.timechart.peak %}
+  <p class="muted">Peak: {{ stats.timechart.peak.count }} requests around {{ stats.timechart.peak.t }}
+     &nbsp;·&nbsp; window {{ stats.summary.first_seen }} → {{ stats.summary.last_seen }}</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h3>HTTP status distribution</h3>
+  <table class="rank">
+    {% for s in stats.status_classes %}
+    <tr>
+      <td class="rank-label">{{ s.label }}</td>
+      <td class="rank-bar"><div class="rankbar"><div class="{{ s.cls }}" style="width:{{ s.share }}%"></div></div></td>
+      <td class="rank-count">{{ s.count }} <span class="muted">({{ s.share }}%)</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{{ rankcard("Top source IPs", stats.top_ips, mono=True) }}
+{{ rankcard("Top IPs by data transferred (exfil lens)", stats.top_ip_bytes, mono=True, fmt_bytes=True) }}
+{{ rankcard("Top user-agents", stats.top_user_agents, mono=True) }}
+{{ rankcard("Top URLs / endpoints", stats.top_urls, mono=True) }}
+{{ rankcard("Domains hit (vhost / referrer)", stats.top_domains, mono=True) }}
+{{ rankcard("Top referrers", stats.top_referrers, mono=True) }}
+{{ rankcard("HTTP methods", stats.top_methods) }}
+{{ rankcard("Top status codes", stats.top_status) }}
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Case #{{ case.id }} — {{ case.name }}
+  <span class="badge {{ case.severity }}">{{ case.severity }}</span>
+  <span class="badge {{ case.status }}">{{ case.status }}</span>
+</h1>
+<p class="muted">{{ case.description }}</p>
+
+<div class="grid">
+  <div class="stat"><div class="n">{{ counts.logs }}</div><div class="l">Indexed events</div></div>
+  <div class="stat"><div class="n">{{ counts.findings }}</div><div class="l">Findings</div></div>
+</div>
+
+<div class="panel" style="margin-top:18px">
+  <form class="inline" method="post" action="/cases/{{ case.id }}/analyze">
+    <button>▶ Run analysis engine</button>
+  </form>
+  <form class="inline" method="post" action="/cases/{{ case.id }}/status">
+    <input type="hidden" name="status" value="{{ 'closed' if case.status == 'open' else 'open' }}">
+    <button class="ghost">{{ 'Close case' if case.status == 'open' else 'Reopen case' }}</button>
+  </form>
+  <a class="btn" style="padding:8px 14px" href="/cases/{{ case.id }}/statistics">📊 Statistics</a>
+  <a class="btn" style="padding:8px 14px" href="/tools/parameters?case_id={{ case.id }}">🔧 Parameters</a>
+  <a class="btn" style="padding:8px 14px" href="/cases/{{ case.id }}/timeline">🕓 Timeline</a>
+  <p class="muted" style="margin-bottom:0">
+    Bulk IP check: <a href="/admin/keys">API Keys page</a> with case ID {{ case.id }}
+  </p>
+</div>
+
+<div class="panel">
+  <h3>Ingest logs</h3>
+  {% if request.query_params.get('ingested') %}
+  <p style="color:var(--ok)">✓ Indexed {{ request.query_params.get('ingested') }} events
+     {%- if request.query_params.get('failed')|int %} ({{ request.query_params.get('failed') }} failed){% endif %}
+     from <span class="mono">{{ request.query_params.get('fname') }}</span>.
+     Now click <strong>▶ Run analysis engine</strong> above.</p>
+  {% elif request.query_params.get('ingest_error') %}
+  <p class="error">{{ request.query_params.get('ingest_error') }}</p>
+  {% endif %}
+  <form method="post" action="/cases/{{ case.id }}/ingest" enctype="multipart/form-data">
+    <p style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="file" name="file" required style="width:auto">
+      <label>Format
+        <select name="log_format" style="width:auto">
+          <option value="auto">auto-detect</option>
+          <option value="combined">Apache / Nginx (combined)</option>
+          <option value="iis">Microsoft IIS (W3C)</option>
+        </select>
+      </label>
+      <button>⬆ Upload &amp; index</button>
+    </p>
+  </form>
+  <p class="muted" style="margin-bottom:0">Big file (GBs)? The CLI streams faster:
+    <span class="mono">AuraDFIR.exe --ingest {{ case.id }} access.log</span>
+    &nbsp;·&nbsp;
+    <span class="mono">python scripts/ingest_logs.py --case {{ case.id }} --file access.log</span></p>
+</div>
+
+<div class="panel">
+  <h3>Findings</h3>
+  <table>
+    <tr><th>Rule</th><th>Severity</th><th>Source IP</th><th>Hits</th><th>Sample / detail</th><th>First seen</th></tr>
+    {% for f in findings %}
+    <tr>
+      <td class="mono">{{ f.rule }}</td>
+      <td><span class="badge {{ f.severity }}">{{ f.severity }}</span></td>
+      <td class="mono">{{ f.source_ip or '—' }}</td>
+      <td>{{ f.count }}</td>
+      <td class="mono" style="max-width:420px;overflow-wrap:anywhere">{{ f.sample or f.description }}</td>
+      <td class="muted">{{ f.first_seen or '' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No findings yet — ingest logs and run the analysis engine.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h3>Notes</h3>
+  <form method="post" action="/cases/{{ case.id }}/notes">
+    <p><textarea name="body" rows="2" placeholder="Add an investigation note…" required></textarea></p>
+    <button>Add note</button>
+  </form>
+  {% for n in notes %}
+  <p><strong>{{ n.author }}</strong> <span class="muted">{{ n.created_at.strftime('%Y-%m-%d %H:%M') }}</span><br>{{ n.body }}</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel login-box">
+  <h2>🔎 {{ APP_NAME }}</h2>
+  {% if request.query_params.get('error') %}<p class="error">{{ request.query_params.get('error') }}</p>{% endif %}
+  <form method="post" action="/auth/login">
+    <p><input name="username" placeholder="Username" required autofocus></p>
+    <p><input name="password" type="password" placeholder="Password" required></p>
+    <button style="width:100%">Sign in</button>
+  </form>
+</div>
+{% endblock %}

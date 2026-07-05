@@ -1,0 +1,5 @@
+# Build-time tools for producing the obfuscated single-file executable.
+# Install alongside requirements.txt only when building the .exe:
+#   pip install -r requirements.txt -r requirements-build.txt
+pyinstaller>=6.6
+pyarmor>=8.5

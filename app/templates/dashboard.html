@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="grid">
+  <div class="stat"><div class="n">{{ stats.open_cases }}</div><div class="l">Open cases</div></div>
+  <div class="stat"><div class="n">{{ stats.total_cases }}</div><div class="l">Total cases</div></div>
+  <div class="stat"><div class="n">{{ stats.users }}</div><div class="l">Active users</div></div>
+  <div class="stat"><div class="n">{{ stats.api_keys }}</div><div class="l">AbuseIPDB keys</div></div>
+  <div class="stat"><div class="n">{{ stats.es_status }}</div><div class="l">Elasticsearch</div></div>
+</div>
+<div class="panel" style="margin-top:18px">
+  <h3>Workflow</h3>
+  <ol class="muted">
+    <li>Create a <a href="/cases">case</a></li>
+    <li>Open the case and <strong>upload a log file</strong> in the "Ingest logs" panel
+        (or use the CLI: <span class="mono">python scripts/ingest_logs.py --case &lt;id&gt; --file access.log</span>)</li>
+    <li>Run the analysis engine from the case page</li>
+    <li>Bulk-check attacker IPs on the <a href="/admin/keys">API Keys</a> page</li>
+    <li>Build the timeline: <span class="mono">python scripts/build_timeline.py --case &lt;id&gt;</span></li>
+  </ol>
+</div>
+{% endblock %}

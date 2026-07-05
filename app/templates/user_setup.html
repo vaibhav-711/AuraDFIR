@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>MFA setup — {{ target.username }}</h1>
+<div class="panel" style="max-width:480px">
+  <p>Ask <strong>{{ target.username }}</strong> to scan this QR with their authenticator app
+     (Google Authenticator, Aegis, etc.). This QR is generated offline and shown only once.</p>
+  <p style="text-align:center"><img src="{{ qr }}" alt="TOTP QR code"></p>
+  <p class="muted">Manual entry secret: <span class="mono">{{ secret }}</span></p>
+  <p><a class="btn" href="/admin/users">Done — back to users</a></p>
+</div>
+{% endblock %}

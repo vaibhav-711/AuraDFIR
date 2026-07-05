@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>🕓 Attack timeline — Case #{{ case.id }} {{ case.name }}</h1>
+
+{% if not has_logs %}
+  <div class="panel"><p class="muted">No logs indexed for this case yet — upload a log file on the
+    <a href="/cases/{{ case.id }}">case page</a> first.</p></div>
+{% else %}
+
+<div class="panel">
+  <form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <label>Filter by source IP
+      <input name="ip" value="{{ filter_ip }}" placeholder="e.g. 203.0.113.7" style="width:auto">
+    </label>
+    <label class="muted"><input type="checkbox" name="include_benign" value="true"
+      {{ 'checked' if include_benign }} style="width:auto"> include benign sessions</label>
+    <button>Apply</button>
+    <span class="spacer" style="flex:1"></span>
+    <a class="btn" href="/cases/{{ case.id }}/timeline.json{% if filter_ip %}?ip={{ filter_ip }}{% endif %}" target="_blank">Download JSON</a>
+    <a href="/cases/{{ case.id }}">← back to case</a>
+  </form>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="n">{{ tl.total_sessions }}</div><div class="l">Total sessions</div></div>
+  <div class="stat"><div class="n">{{ tl.suspicious_sessions }}</div><div class="l">Suspicious sessions</div></div>
+  <div class="stat"><div class="n">{{ tl.attack_chains | length }}</div><div class="l">Attacker IPs</div></div>
+</div>
+
+{% if svg %}
+<div class="panel">
+  <h3>Session timeline (per attacker IP, coloured by phase)</h3>
+  <div style="overflow-x:auto">{{ svg | safe }}</div>
+  <p class="muted">Hover a bar for details. Lanes are ordered most-severe first.</p>
+</div>
+{% else %}
+<div class="panel"><p class="muted">No suspicious sessions to plot.
+  {% if not include_benign %}Tick "include benign sessions" to see normal traffic.{% endif %}</p></div>
+{% endif %}
+
+{% if tl.attack_chains %}
+<div class="panel">
+  <h3>Attack chains</h3>
+  <table>
+    <tr><th>Source IP</th><th>Phases reached</th><th>Sessions</th><th>First seen</th></tr>
+    {% for c in tl.attack_chains %}
+    <tr>
+      <td class="mono">{{ c.ip }}</td>
+      <td>{% for p in c.phases %}<span class="badge {{ 'critical' if p in ['post-exploitation','exfiltration'] else ('high' if p == 'exploitation' else 'medium') }}">{{ p }}</span> {% endfor %}</td>
+      <td>{{ c.sessions }}</td>
+      <td class="muted">{{ c.first_seen }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h3>Sessions</h3>
+  <table>
+    <tr><th>Start</th><th>End</th><th>Source IP</th><th>Phase</th><th>Events</th><th>404s</th><th>Bytes</th><th>Tags</th><th>User-agent</th></tr>
+    {% for s in tl.sessions %}
+    <tr>
+      <td class="muted mono">{{ s.start }}</td>
+      <td class="muted mono">{{ s.end }}</td>
+      <td class="mono">{{ s.ip }}</td>
+      <td><span class="badge {{ 'critical' if s.phase in ['post-exploitation','exfiltration'] else ('high' if s.phase == 'exploitation' else ('medium' if s.phase == 'recon' else 'low')) }}">{{ s.phase }}</span></td>
+      <td>{{ s.event_count }}</td>
+      <td>{{ s.n404 }}</td>
+      <td>{{ (s.bytes_out / 1048576) | round(2) }} MB</td>
+      <td class="mono" style="max-width:200px;overflow-wrap:anywhere">{{ s.tags | join(', ') or '—' }}</td>
+      <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ s.ua }}">{{ s.ua or '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">No sessions.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

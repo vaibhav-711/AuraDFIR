@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+<div class="panel">
+  <h3>Create user</h3>
+  <form method="post" action="/admin/users">
+    <p style="display:flex;gap:10px;align-items:center">
+      <input name="username" placeholder="Username" required>
+      <input name="password" type="password" placeholder="Initial password" required>
+      <label style="white-space:nowrap"><input type="checkbox" name="is_admin" value="true" style="width:auto"> Admin</label>
+      <button>Create</button>
+    </p>
+  </form>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>ID</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th></th></tr>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td>{{ u.username }}</td>
+      <td>{{ 'admin' if u.is_admin else 'analyst' }}</td>
+      <td>{% if u.active %}<span class="badge open">active</span>{% else %}<span class="badge closed">disabled</span>{% endif %}</td>
+      <td class="muted">{{ u.last_login.strftime('%Y-%m-%d %H:%M') if u.last_login else 'never' }}</td>
+      <td style="white-space:nowrap">
+        <form class="inline" method="post" action="/admin/users/{{ u.id }}/reset-mfa">
+          <button class="ghost">Reset MFA</button>
+        </form>
+        {% if u.id != user.id %}
+        <form class="inline" method="post" action="/admin/users/{{ u.id }}/toggle">
+          <button class="ghost">{{ 'Disable' if u.active else 'Enable' }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
