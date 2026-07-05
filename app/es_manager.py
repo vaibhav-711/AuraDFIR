@@ -24,11 +24,15 @@ import httpx
 
 from app import config
 
-ES_VERSION = os.getenv("AURADFIR_ES_VERSION", "8.13.4")
+ES_VERSION = os.getenv("AURADFIR_ES_VERSION", "8.19.18")
 ES_HEAP = os.getenv("AURADFIR_ES_HEAP", "512m")
 LOCAL_URL = "http://localhost:9200"
 DOWNLOAD_URL = ("https://artifacts.elastic.co/downloads/elasticsearch/"
                 f"elasticsearch-{ES_VERSION}-windows-x86_64.zip")
+DOWNLOAD_RETRIES = 5
+# Generous read timeout (gap between chunks, not total time) so a slow-but-alive
+# connection isn't mistaken for a hang, while a truly stalled one still surfaces.
+DOWNLOAD_TIMEOUT = httpx.Timeout(connect=15.0, read=30.0, write=30.0, pool=15.0)
 
 _MENU = (
     "\n" + "=" * 60 + "\n"
@@ -36,7 +40,7 @@ _MENU = (
     + "=" * 60 + "\n"
     "  Aura DFIR needs Elasticsearch (it is NOT bundled). Pick one:\n"
     "    * Already installed?  enter the folder that contains\n"
-    "        bin\\elasticsearch.bat   (e.g. C:\\elasticsearch-8.13.4)\n"
+    "        bin\\elasticsearch.bat   (e.g. C:\\elasticsearch-8.19.18)\n"
     "    * Running elsewhere?  enter its URL  (e.g. http://localhost:9200)\n"
     "    * Neither?            just press Enter to download & set it up\n"
     + "-" * 60
@@ -119,21 +123,57 @@ def configure_yml(home: Path):
 
 
 def _download(url: str, dest: Path):
-    with httpx.stream("GET", url, follow_redirects=True, timeout=None) as r:
-        r.raise_for_status()
-        total = int(r.headers.get("Content-Length", "0") or 0)
-        done, last = 0, -1
-        with open(dest, "wb") as f:
-            for chunk in r.iter_bytes(262144):
-                f.write(chunk)
-                done += len(chunk)
-                if total:
-                    pct = done * 100 // total
-                    if pct != last and pct % 5 == 0:
-                        print(f"\r  {pct:3d}%  ({done // 1048576}/{total // 1048576} MB)",
-                              end="", flush=True)
-                        last = pct
-        print()
+    """Download to `dest`, retrying transient network failures and resuming from
+    where a previous attempt left off (Elastic's CDN supports HTTP Range requests).
+    On final failure the partial file is removed — a retry always either produces
+    a complete file or no file, never a corrupt one that silently blocks re-tries.
+    """
+    last_exc = None
+    for attempt in range(1, DOWNLOAD_RETRIES + 1):
+        resume_from = dest.stat().st_size if dest.exists() else 0
+        headers = {"Range": f"bytes={resume_from}-"} if resume_from else {}
+        try:
+            with httpx.stream("GET", url, follow_redirects=True, headers=headers,
+                              timeout=DOWNLOAD_TIMEOUT) as r:
+                if resume_from and r.status_code == 200:
+                    # Server ignored our Range request and is sending the whole
+                    # file again — restart clean instead of appending garbage.
+                    resume_from = 0
+                elif r.status_code not in (200, 206):
+                    r.raise_for_status()
+
+                total = int(r.headers.get("Content-Length", "0") or 0) + resume_from
+                done, last = resume_from, -1
+                with open(dest, "ab" if resume_from else "wb") as f:
+                    for chunk in r.iter_bytes(262144):
+                        f.write(chunk)
+                        done += len(chunk)
+                        if total:
+                            pct = done * 100 // total
+                            if pct != last and pct % 5 == 0:
+                                print(f"\r  {pct:3d}%  ({done // 1048576}/{total // 1048576} MB)",
+                                      end="", flush=True)
+                                last = pct
+                if total and done < total:
+                    raise httpx.TransportError(
+                        f"connection closed early ({done}/{total} bytes)")
+            print()
+            return
+        except (httpx.HTTPError, OSError) as exc:
+            last_exc = exc
+            print(f"\n  Download attempt {attempt}/{DOWNLOAD_RETRIES} interrupted: {exc}")
+            if attempt < DOWNLOAD_RETRIES:
+                print("  Resuming...")
+                time.sleep(3)
+
+    dest.unlink(missing_ok=True)
+    raise RuntimeError(
+        f"Could not download Elasticsearch after {DOWNLOAD_RETRIES} attempts "
+        f"({last_exc}). Check your internet connection/proxy/firewall, or "
+        "download the Windows zip manually from "
+        "https://www.elastic.co/downloads/elasticsearch and point Aura DFIR "
+        "at the extracted folder instead."
+    ) from last_exc
 
 
 def download_and_extract(install_dir: Path) -> Path:
@@ -144,11 +184,17 @@ def download_and_extract(install_dir: Path) -> Path:
         return home
     zip_path = install_dir / f"elasticsearch-{ES_VERSION}.zip"
     if not zip_path.exists():
-        print(f"  Downloading Elasticsearch {ES_VERSION} (~600 MB, one-time)...")
+        print(f"  Downloading Elasticsearch {ES_VERSION} (~500 MB, one-time)...")
         _download(DOWNLOAD_URL, zip_path)
     print("  Extracting...")
-    with zipfile.ZipFile(zip_path) as z:
-        z.extractall(install_dir)
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(install_dir)
+    except zipfile.BadZipFile as exc:
+        zip_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "The downloaded Elasticsearch archive was corrupt. Please try again."
+        ) from exc
     try:
         zip_path.unlink()
     except OSError:
@@ -248,12 +294,15 @@ def ensure(prompt=input, allow_download: bool = True):
     # 3) Non-interactive callers (e.g. --ingest) stop here.
     if prompt is None:
         if allow_download and os.getenv("AURADFIR_NONINTERACTIVE"):
-            home = download_and_extract(_default_install_dir())
-            proc = _start_managed(home, LOCAL_URL)
-            if proc:
-                save_config({"managed": True, "es_home": str(home),
-                             "es_url": LOCAL_URL, "version": ES_VERSION})
-                return _finish(proc, LOCAL_URL)
+            try:
+                home = download_and_extract(_default_install_dir())
+                proc = _start_managed(home, LOCAL_URL)
+                if proc:
+                    save_config({"managed": True, "es_home": str(home),
+                                 "es_url": LOCAL_URL, "version": ES_VERSION})
+                    return _finish(proc, LOCAL_URL)
+            except (RuntimeError, OSError) as exc:
+                print(f"  Elasticsearch setup failed: {exc}")
         return _finish(None, None)
 
     # 4) First-run interactive setup.
@@ -266,7 +315,11 @@ def _interactive(prompt):
         raw = (prompt("  Your choice (folder path / URL / Enter to auto-download): ") or "").strip().strip('"')
 
         if raw == "":
-            home = download_and_extract(_default_install_dir())
+            try:
+                home = download_and_extract(_default_install_dir())
+            except (RuntimeError, OSError) as exc:
+                print(f"  {exc}")
+                continue
             proc = _start_managed(home, LOCAL_URL)
             if proc:
                 save_config({"managed": True, "es_home": str(home),
@@ -297,7 +350,11 @@ def _interactive(prompt):
         print("  No bin\\elasticsearch(.bat) under that folder. Try again.")
 
     print("  Falling back to automatic download.")
-    home = download_and_extract(_default_install_dir())
+    try:
+        home = download_and_extract(_default_install_dir())
+    except (RuntimeError, OSError) as exc:
+        print(f"  {exc}")
+        return _finish(None, None)
     proc = _start_managed(home, LOCAL_URL)
     if proc:
         save_config({"managed": True, "es_home": str(home),

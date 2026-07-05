@@ -18,7 +18,7 @@
   deployment, enable xpack.security and set ES_USER / ES_PASSWORD in .env.
 #>
 param(
-    [string]$Version = "8.13.4",
+    [string]$Version = "8.19.18",
     [string]$HeapSize = "512m"
 )
 $ErrorActionPreference = "Stop"
@@ -33,11 +33,30 @@ $Url        = "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearc
 if (-not (Test-Path $EsHome)) {
     New-Item -ItemType Directory -Force $InstallDir | Out-Null
     if (-not (Test-Path $Zip)) {
-        Write-Host "Downloading Elasticsearch $Version (~600 MB, one-time)..." -ForegroundColor Cyan
-        Invoke-WebRequest -Uri $Url -OutFile $Zip
+        Write-Host "Downloading Elasticsearch $Version (~500 MB, one-time)..." -ForegroundColor Cyan
+        $maxAttempts = 5
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $Url -OutFile $Zip
+                break
+            } catch {
+                Write-Host "  Attempt $attempt/$maxAttempts failed: $($_.Exception.Message)" -ForegroundColor Yellow
+                if (Test-Path $Zip) { Remove-Item $Zip -Force }   # never leave a corrupt partial file
+                if ($attempt -eq $maxAttempts) {
+                    throw "Could not download Elasticsearch after $maxAttempts attempts. Check your internet connection/proxy/firewall, or download the Windows zip manually from https://www.elastic.co/downloads/elasticsearch and unzip it into: $InstallDir"
+                }
+                Write-Host "  Retrying..." -ForegroundColor Yellow
+                Start-Sleep -Seconds 3
+            }
+        }
     }
     Write-Host "Extracting..." -ForegroundColor Cyan
-    Expand-Archive -Path $Zip -DestinationPath $InstallDir -Force
+    try {
+        Expand-Archive -Path $Zip -DestinationPath $InstallDir -Force
+    } catch {
+        Remove-Item $Zip -Force -ErrorAction SilentlyContinue
+        throw "The downloaded Elasticsearch archive was corrupt. Please run this script again to retry."
+    }
     Remove-Item $Zip -Force
 }
 

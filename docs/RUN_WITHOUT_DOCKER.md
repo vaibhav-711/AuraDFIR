@@ -36,8 +36,8 @@ Leave the window open; press Ctrl+C to stop. Re-running it starts instantly (no 
 ## Option B — do it manually
 
 1. Download the Windows ZIP from
-   <https://www.elastic.co/downloads/elasticsearch> (e.g. `elasticsearch-8.13.4-windows-x86_64.zip`).
-2. Unzip it anywhere, e.g. `C:\elasticsearch-8.13.4`.
+   <https://www.elastic.co/downloads/elasticsearch> (e.g. `elasticsearch-8.19.18-windows-x86_64.zip`).
+2. Unzip it anywhere, e.g. `C:\elasticsearch-8.19.18`.
 3. Edit `config\elasticsearch.yml` and add:
    ```yaml
    discovery.type: single-node
@@ -47,7 +47,7 @@ Leave the window open; press Ctrl+C to stop. Re-running it starts instantly (no 
    `set ES_JAVA_OPTS=-Xms512m -Xmx512m`
 5. Start it:
    ```powershell
-   C:\elasticsearch-8.13.4\bin\elasticsearch.bat
+   C:\elasticsearch-8.19.18\bin\elasticsearch.bat
    ```
 6. Confirm it's up: open <http://localhost:9200> — you should get a JSON banner.
 
