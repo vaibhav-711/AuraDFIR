@@ -2,9 +2,6 @@
 
 **An open-source web server log analysis and incident-response platform, built on the Elastic Stack.**
 
-> ⚠️ Rename note: check GitHub/PyPI for name collisions before publishing. The name appears in `app/config.py` (`APP_NAME`) and templates only.
-
----
 
 ## What is Aura DFIR?
 
@@ -190,7 +187,7 @@ it; on the installer, tick "Add Python to PATH").
 
 ```powershell
 # 1. Get the code
-git clone https://github.com/<you>/AuraDFIR.git
+git clone [https://github.com/<you>/AuraDFIR.git](https://github.com/vaibhav-711/AuraDFIR)
 cd AuraDFIR
 
 # 2. Create an isolated Python environment for this project ("virtual environment")
